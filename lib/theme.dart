@@ -36,10 +36,10 @@ ThemeData _buildAppTheme(BuildContext context) {
     subhead: textTheme.subhead.copyWith(),
     body2: textTheme.body2.copyWith(
       fontWeight: FontWeight.bold,
-      fontSize: 14,
+      fontSize: 15,
     ),
     body1: textTheme.body1.copyWith(
-      fontSize: 14,
+      fontSize: 15,
     ),
     caption: textTheme.caption.copyWith(
       color: Colors.black.withOpacity(0.6),

@@ -16,7 +16,6 @@ class WeightEntryProvider extends ChangeNotifier {
     if (context != null) {
       bool accepted = await showDialog<bool>(
         context: context,
-        barrierDismissible: false, // user must tap button for close dialog!
         builder: (BuildContext context) {
           return AlertDialog(
             title: Text('Delete measurement?'),
@@ -40,7 +39,7 @@ class WeightEntryProvider extends ChangeNotifier {
           );
         },
       );
-      if (!accepted) return;
+      if (accepted == null || !accepted) return;
     }
     // Remove the entry
     _entries.remove(entry);

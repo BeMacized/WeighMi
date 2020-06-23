@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:provider/provider.dart';
 import 'package:weigh_mi/theme.dart';
 import 'package:weigh_mi/views/main/main-view.provider.dart';
 import 'package:weigh_mi/views/main/main.view.dart';
 import 'package:weigh_mi/views/measure/measure-view.provider.dart';
 import 'package:weigh_mi/views/measure/measure.view.dart';
+import 'package:weigh_mi/views/settings/settings.view.dart';
 
 import 'globals.dart';
 import 'providers/measure.provider.dart';
@@ -15,6 +17,7 @@ void main() {
 }
 
 class WeightTrackerApp extends StatefulWidget {
+
   @override
   _WeightTrackerAppState createState() => _WeightTrackerAppState();
 }
@@ -31,24 +34,13 @@ class _WeightTrackerAppState extends State<WeightTrackerApp>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    print(state);
-    switch (state) {
-      case AppLifecycleState.resumed:
-      case AppLifecycleState.inactive:
-        measureProvider.startMeasuring();
-        break;
-      case AppLifecycleState.paused:
-      case AppLifecycleState.detached:
-        measureProvider.stopMeasuring();
-        break;
-    }
+    measureProvider.didChangeAppLifecycleState(state);
   }
 
   @override
   void initState() {
     WidgetsBinding.instance.addObserver(this);
     weightEntryProvider.loadEntries();
-    measureProvider.startMeasuring();
     super.initState();
   }
 
@@ -69,6 +61,9 @@ class _WeightTrackerAppState extends State<WeightTrackerApp>
       case '/measure':
         builder = (BuildContext _) => MeasureView();
         break;
+      case '/settings':
+        builder = (BuildContext _) => SettingsView();
+        break;
       default:
         throw Exception('Invalid route: ${settings.name}');
     }
@@ -88,6 +83,7 @@ class _WeightTrackerAppState extends State<WeightTrackerApp>
         debugShowCheckedModeBanner: false,
         onGenerateRoute: onGenerateRoute,
         theme: getAppTheme(context),
+//        initialRoute: '/settings',
       ),
       providers: [
         //

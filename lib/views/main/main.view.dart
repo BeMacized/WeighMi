@@ -4,6 +4,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 import 'package:weigh_mi/models/menu-choice.model.dart';
+import 'package:weigh_mi/views/main/widgets/ble-error-bar.widget.dart';
 import 'package:weigh_mi/views/main/widgets/main-last-entries-pane.widget.dart';
 import 'package:weigh_mi/views/main/widgets/main-stats-pane.widget.dart';
 import 'package:weigh_mi/views/main/widgets/main-top-pane.widget.dart';
@@ -51,6 +52,7 @@ class _MainViewState extends State<MainView> {
                       ],
                     );
                   }),
+                  BLEErrorBar(),
                   Consumer<MainViewProvider>(builder: (context, vp, child) {
                     return Padding(
                       padding: EdgeInsets.only(left: 12, right: 12, top: 12),

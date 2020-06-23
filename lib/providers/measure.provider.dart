@@ -1,29 +1,30 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:xiaomi_scale/xiaomi_scale.dart';
 
 import '../globals.dart';
 
 class MeasureProvider extends ChangeNotifier {
   StreamSubscription _measurementSubscription;
+  StreamSubscription _bleStatusSubscription;
 
-  MeasureProvider();
+  MeasureProvider() {
+    _bleStatusSubscription =
+        FlutterReactiveBle().statusStream.listen(_onBleStatus);
+  }
 
   @override
   void dispose() {
     _measurementSubscription?.cancel();
+    _bleStatusSubscription?.cancel();
     super.dispose();
   }
 
   void startMeasuring() async {
-    // Stop if we're already measuring
+    // Stop if we're already measuringgirt
     if (_measurementSubscription != null) return;
-
-    // Handle permissions
-    if (!(await _handlePermissions())) return;
-
     // Start measuring
     _measurementSubscription =
         MiScale.instance.takeMeasurements().listen(_onMeasurement);
@@ -33,14 +34,6 @@ class MeasureProvider extends ChangeNotifier {
     _measurementSubscription?.cancel();
     _measurementSubscription = null;
     clearMeasurement();
-  }
-
-  Future<bool> _handlePermissions() async {
-    PermissionStatus status = await Permission.location.status;
-    if (status.isUndetermined || status.isDenied) {
-      status = await Permission.location.request();
-    }
-    return status.isGranted;
   }
 
   //
@@ -54,6 +47,11 @@ class MeasureProvider extends ChangeNotifier {
     }
   }
 
+  void _onBleStatus(BleStatus status) {
+    if (status == BleStatus.ready) startMeasuring();
+    else if (_measurementSubscription != null) stopMeasuring();
+  }
+
   //
   // Public functions
   //
@@ -64,6 +62,19 @@ class MeasureProvider extends ChangeNotifier {
     Application.navigator.popUntil(
       (route) => route.settings.name != '/measure',
     );
+  }
+
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.resumed:
+      case AppLifecycleState.inactive:
+        if (_measurementSubscription == null) startMeasuring();
+        break;
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        if (_measurementSubscription != null) stopMeasuring();
+        break;
+    }
   }
 
   //
