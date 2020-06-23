@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:provider/provider.dart';
 import 'package:weigh_mi/theme.dart';
 import 'package:weigh_mi/views/main/main-view.provider.dart';
@@ -17,13 +16,11 @@ void main() {
 }
 
 class WeightTrackerApp extends StatefulWidget {
-
   @override
   _WeightTrackerAppState createState() => _WeightTrackerAppState();
 }
 
-class _WeightTrackerAppState extends State<WeightTrackerApp>
-    with WidgetsBindingObserver {
+class _WeightTrackerAppState extends State<WeightTrackerApp> with WidgetsBindingObserver {
   WeightEntryProvider weightEntryProvider = WeightEntryProvider();
   MeasureProvider measureProvider = MeasureProvider();
 
@@ -89,27 +86,20 @@ class _WeightTrackerAppState extends State<WeightTrackerApp>
         //
         // SERVICE PROVIDERS
         //
-        ChangeNotifierProvider<WeightEntryProvider>(
+        Provider<WeightEntryProvider>(
           create: (_) => weightEntryProvider,
         ),
-        ChangeNotifierProvider<MeasureProvider>(
+        Provider<MeasureProvider>(
           create: (_) => measureProvider,
         ),
         //
         // VIEW PROVIDERS
         //
-        ChangeNotifierProxyProvider<WeightEntryProvider, MainViewProvider>(
-          create: (_) => MainViewProvider(),
-          update: (_, weightEntryProvider, mainViewProvider) =>
-              mainViewProvider..dependencyUpdate(weightEntryProvider),
+        Provider<MainViewProvider>(
+          create: (_) => MainViewProvider(weightEntryProvider),
         ),
-        ChangeNotifierProxyProvider2<MeasureProvider, WeightEntryProvider,
-            MeasureViewProvider>(
-          create: (_) => MeasureViewProvider(),
-          update:
-              (_, measureProvider, weightEntryProvider, measureViewProvider) =>
-                  measureViewProvider
-                    ..dependencyUpdate(measureProvider, weightEntryProvider),
+        Provider<MeasureViewProvider>(
+          create: (_) => MeasureViewProvider(measureProvider, weightEntryProvider),
         ),
       ],
     );

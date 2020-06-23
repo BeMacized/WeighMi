@@ -12,13 +12,27 @@ class MeasureView extends StatefulWidget {
 }
 
 class _MeasureViewState extends State<MeasureView> {
+  MeasureViewProvider vp;
+
+  @override
+  void initState() {
+    vp = Provider.of<MeasureViewProvider>(context, listen: false);
+    vp.onViewInit();
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    vp.onViewDispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: WillPopScope(
         onWillPop: () async {
-          Provider.of<MeasureProvider>(context, listen: false)
-              .clearMeasurement();
+          Provider.of<MeasureProvider>(context, listen: false).clearMeasurement();
           return false;
         },
         child: Material(
@@ -66,8 +80,10 @@ class _MeasureViewState extends State<MeasureView> {
 
   Widget _buildSaveButton() {
     return CustomCard(
-      child: Consumer<MeasureViewProvider>(
-        builder: (context, vp, child) {
+      child: StreamBuilder<bool>(
+        stream: vp.canSave,
+        initialData: false,
+        builder: (context, snapshot) {
           return FlatButton(
             color: Theme.of(context).primaryColor,
             disabledColor: Theme.of(context).primaryColor.withOpacity(0.3),
@@ -77,7 +93,7 @@ class _MeasureViewState extends State<MeasureView> {
                 color: Colors.white,
               ),
             ),
-            onPressed: vp.canSave ? vp.saveMeasurement : null,
+            onPressed: snapshot.data ? vp.saveMeasurement : null,
           );
         },
       ),

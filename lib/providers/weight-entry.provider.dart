@@ -1,16 +1,26 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:weigh_mi/models/weight-entry.model.dart';
 
 const ENTRIES_PREF_KEY = 'WEIGHT_ENTRIES';
 
-class WeightEntryProvider extends ChangeNotifier {
-  List<WeightEntry> _entries = [];
+class WeightEntryProvider {
+  // Private streams
+  BehaviorSubject<List<WeightEntry>> _entries = BehaviorSubject.seeded([]);
 
-  List<WeightEntry> get entries => _entries.sublist(0);
+  // Public streams
+  Stream<List<WeightEntry>> get entries => _entries.asBroadcastStream();
 
+  WeightEntryProvider() {
+    entries.skip(1).listen((event) {
+      saveEntries();
+    });
+  }
+
+  // Actions
   Future<void> deleteEntry(WeightEntry entry, {BuildContext context}) async {
     // If context was provided, ask user for confirmation
     if (context != null) {
@@ -19,8 +29,7 @@ class WeightEntryProvider extends ChangeNotifier {
         builder: (BuildContext context) {
           return AlertDialog(
             title: Text('Delete measurement?'),
-            content: const Text(
-                'You are about to delete a measurement. Are you sure you want to delete it?'),
+            content: const Text('You are about to delete a measurement. Are you sure you want to delete it?'),
             actions: <Widget>[
               FlatButton(
                 child: const Text('CANCEL'),
@@ -29,8 +38,7 @@ class WeightEntryProvider extends ChangeNotifier {
                 },
               ),
               FlatButton(
-                child:
-                    const Text('DELETE', style: TextStyle(color: Colors.red)),
+                child: const Text('DELETE', style: TextStyle(color: Colors.red)),
                 onPressed: () {
                   Navigator.of(context).pop(true);
                 },
@@ -42,49 +50,46 @@ class WeightEntryProvider extends ChangeNotifier {
       if (accepted == null || !accepted) return;
     }
     // Remove the entry
-    _entries.remove(entry);
-    notifyListeners();
-    saveEntries();
+    _entries.add(List<WeightEntry>.of(_entries.value)..remove(entry));
   }
 
   void addEntry(WeightEntry entry) {
-    if (_entries.contains(entry)) return;
-    _entries.add(entry);
-    _entries.sort((a, b) => a.dateTime.compareTo(b.dateTime));
-    notifyListeners();
-    saveEntries();
+    if (_entries.value.contains(entry)) return;
+    var newEntries = List<WeightEntry>.from(_entries.value)..add(entry);
+    newEntries.sort((a, b) => a.dateTime.compareTo(b.dateTime));
+    _entries.add(newEntries);
   }
 
   void replaceEntry(WeightEntry entry, WeightEntry newEntry) {
-    int index = _entries.indexOf(entry);
+    var newEntries = List<WeightEntry>.from(_entries.value);
+    int index = newEntries.indexOf(entry);
     if (index < 0) throw Exception("Entry does not exist in list!");
-    _entries.removeAt(index);
-    _entries.insert(index, newEntry);
-    notifyListeners();
-    saveEntries();
+    newEntries.removeAt(index);
+    newEntries.insert(index, newEntry);
+    _entries.add(newEntries);
   }
 
   Future<void> loadEntries() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     if (!prefs.containsKey(ENTRIES_PREF_KEY)) {
+      print('CLEARING ENTRIES');
       saveEntries();
     } else {
+      print('LOADING ENTRIES');
       String entriesStr = prefs.getString(ENTRIES_PREF_KEY);
-      _entries = List.from(jsonDecode(entriesStr))
-          .map((entry) => WeightEntry.fromJson(entry))
-          .toList();
-      notifyListeners();
+      var newEntries =
+          List.from(jsonDecode(entriesStr)).map<WeightEntry>((entry) => WeightEntry.fromJson(entry)).toList();
+      _entries.add(newEntries);
     }
   }
 
   Future<void> saveEntries() async {
+    print('SAVING ENTRIES');
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    prefs.setString(ENTRIES_PREF_KEY, jsonEncode(_entries));
+    prefs.setString(ENTRIES_PREF_KEY, jsonEncode(_entries.value));
   }
 
   void deleteAllEntries() {
-    _entries = [];
-    notifyListeners();
-    saveEntries();
+    _entries.add([]);
   }
 }

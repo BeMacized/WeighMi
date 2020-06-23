@@ -6,6 +6,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:intl/intl.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:weigh_mi/models/stat-data.model.dart';
 import 'package:weigh_mi/models/weight-entry.model.dart';
 import 'package:weigh_mi/providers/weight-entry.provider.dart';
@@ -14,117 +15,71 @@ import 'package:weigh_mi/utils/weight-utils.dart';
 import 'package:weigh_mi/widgets/stat.widget.dart';
 import 'package:xiaomi_scale/xiaomi_scale.dart';
 
-class MainViewProvider extends ChangeNotifier {
+class MainViewProvider {
+  // Dependencies
   WeightEntryProvider _weightEntryProvider;
 
-  MainViewProvider() {
-    _updateStatData([]);
-  }
+  // Private streams
+  PublishSubject<void> _viewDispose = PublishSubject();
+  BehaviorSubject<double> _currentWeight = BehaviorSubject.seeded(null);
+  BehaviorSubject<double> _currentBMI = BehaviorSubject.seeded(null);
+  BehaviorSubject<MiScaleUnit> _weightUnit = BehaviorSubject.seeded(null);
+  BehaviorSubject<List<WeightEntry>> _lineChartData = BehaviorSubject.seeded([]);
+  BehaviorSubject<List<StatData>> _statDatas = BehaviorSubject.seeded([]);
+  BehaviorSubject<List<WeightEntry>> _lastWeightEntries = BehaviorSubject.seeded([]);
 
-  //
+  // Public streams
+  Stream<double> get currentWeight => _currentWeight.asBroadcastStream();
+
+  Stream<double> get currentBMI => _currentBMI.asBroadcastStream();
+
+  Stream<MiScaleUnit> get weightUnit => _weightUnit.asBroadcastStream();
+
+  Stream<List<WeightEntry>> get lineChartData => _lineChartData.asBroadcastStream();
+
+  Stream<List<StatData>> get statDatas => _statDatas.asBroadcastStream();
+
+  Stream<List<WeightEntry>> get lastWeightEntries => _lastWeightEntries.asBroadcastStream();
+
+  MainViewProvider(this._weightEntryProvider);
+
   // Event handlers
-  //
 
-  dependencyUpdate(WeightEntryProvider weightEntryProvider) {
-    this._weightEntryProvider = weightEntryProvider;
-    onWeightEntryProviderChanged(weightEntryProvider);
-  }
-
-  void onWeightEntryProviderChanged(WeightEntryProvider weightEntryProvider) {
+  void _onWeightEntriesUpdated(List<WeightEntry> entries) {
     try {
-      List<WeightEntry> entries = weightEntryProvider.entries;
       WeightEntry lastEntry = entries.isNotEmpty ? entries.last : null;
-      _updateCurrentWeight(lastEntry?.weight);
-      _updateCurrentWeightUnit(lastEntry?.unit);
+      _currentWeight.add(lastEntry?.weight);
+      _weightUnit.add(lastEntry?.unit);
       // TODO: Do BMI calculation once we have the user's height
-      _updateCurrentBMI(null);
-      _updateStatData(entries);
-      _updateLastWeightEntries(
+      _currentBMI.add(null);
+      _statDatas.add([
+        _getStatDataForDays(entries, 7),
+        _getStatDataForDays(entries, 14),
+        _getStatDataForDays(entries, 30),
+        _getStatDataForTotal(entries),
+      ]);
+      _lastWeightEntries.add(
         entries.sublist(max(entries.length - 5, 0)).reversed.toList(),
       );
-      _updateLineChartData(_buildLineChartData(entries));
+      _lineChartData.add(_buildLineChartData(entries));
     } catch (e, stacktrace) {
       print('Error MainViewProvider#onWeightEntriesChanged: $e\n$stacktrace');
     }
   }
 
-  //
-  // Public Fields
-  //
-
-  // Current weight
-  double _currentWeight;
-
-  double get currentWeight => _currentWeight;
-
-  void _updateCurrentWeight(double value) {
-    _currentWeight = value;
-    notifyListeners();
+  Future<void> onViewInit() async {
+    _weightEntryProvider.entries.takeUntil(_viewDispose).listen((entries) => _onWeightEntriesUpdated(entries));
   }
 
-  // Current BMI
-  double _currentBMI;
-
-  double get currentBMI => _currentBMI;
-
-  void _updateCurrentBMI(double value) {
-    _currentBMI = value;
-    notifyListeners();
+  Future<void> onViewDispose() async {
+    _viewDispose.add(null);
   }
 
-  // Current weight unit
-  MiScaleUnit _currentWeightUnit;
+  // Actions
 
-  MiScaleUnit get currentWeightUnit => _currentWeightUnit;
-
-  void _updateCurrentWeightUnit(MiScaleUnit value) {
-    _currentWeightUnit = value;
-    notifyListeners();
-  }
-
-  // Line chart data
-  List<WeightEntry> _lineChartData = [];
-
-  List<WeightEntry> get lineChartData => _lineChartData;
-
-  void _updateLineChartData(List<WeightEntry> data) {
-    _lineChartData = data;
-    notifyListeners();
-  }
-
-  // Stat datas
-  List<StatData> _statDatas = [];
-
-  List<StatData> get statDatas => _statDatas;
-
-  void _updateStatData(List<WeightEntry> entries) {
-    _statDatas = [
-      _getStatDataForDays(entries, 7),
-      _getStatDataForDays(entries, 14),
-      _getStatDataForDays(entries, 30),
-      _getStatDataForTotal(entries),
-    ];
-    notifyListeners();
-  }
-
-  // Current weight unit
-  List<WeightEntry> _lastWeightEntries = [];
-
-  List<WeightEntry> get lastWeightEntries => _lastWeightEntries;
-
-  void _updateLastWeightEntries(List<WeightEntry> value) {
-    _lastWeightEntries = value;
-    notifyListeners();
-  }
-
-  //
-  // Public actions
-  //
-
-  Future<void> onLibraImport() async {
+  Future<void> libraImport() async {
     try {
-      File file =
-          await FilePicker.getFile(type: FileType.custom, fileExtension: 'csv');
+      File file = await FilePicker.getFile(type: FileType.custom, fileExtension: 'csv');
       if (file == null) return;
       List<WeightEntry> entries = parseLibraCSV(file.readAsStringSync());
       entries.forEach((entry) {
@@ -142,15 +97,14 @@ class MainViewProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> onDeleteAllMeasurements(BuildContext context) async {
+  Future<void> deleteAllMeasurements(BuildContext context) async {
     bool accepted = await showDialog<bool>(
       context: context,
       barrierDismissible: false, // user must tap button for close dialog!
       builder: (BuildContext context) {
         return AlertDialog(
           title: Text('Delete all measurements?'),
-          content:
-              const Text('This will delete all measurements from your device.'),
+          content: const Text('This will delete all measurements from your device.'),
           actions: <Widget>[
             FlatButton(
               child: const Text('CANCEL'),
@@ -174,9 +128,9 @@ class MainViewProvider extends ChangeNotifier {
     }
   }
 
-  //
+  // Event handlers
+
   // Private utils
-  //
 
   StatData _getStatDataForTotal(List<WeightEntry> entries) {
     // Determine difference
@@ -188,9 +142,8 @@ class MainViewProvider extends ChangeNotifier {
             entries.last.unit,
           );
     // Determine label
-    String label = entries.isEmpty
-        ? 'Overall Change'
-        : 'Change since ${DateFormat('d MMM yyyy').format(entries.first.dateTime)}';
+    String label =
+        entries.isEmpty ? 'Overall Change' : 'Change since ${DateFormat('d MMM yyyy').format(entries.first.dateTime)}';
     // Construct stat data
     return StatData(
       label: label,
@@ -198,12 +151,8 @@ class MainViewProvider extends ChangeNotifier {
       unit: getScaleUnitName(
         entries.isEmpty ? null : entries.last.unit,
       ),
-      sentiment: value > 0
-          ? Sentiment.NEGATIVE
-          : value < 0 ? Sentiment.POSITIVE : Sentiment.NEUTRAL,
-      direction: value > 0
-          ? Direction.UP
-          : value < 0 ? Direction.DOWN : Direction.UNCHANGED,
+      sentiment: value > 0 ? Sentiment.NEGATIVE : value < 0 ? Sentiment.POSITIVE : Sentiment.NEUTRAL,
+      direction: value > 0 ? Direction.UP : value < 0 ? Direction.DOWN : Direction.UNCHANGED,
     );
   }
 
@@ -212,9 +161,7 @@ class MainViewProvider extends ChangeNotifier {
     List<WeightEntry> lastEntries = entries
         .where(
           (e) =>
-              e.dateTime
-                  .isAfter(DateTime.now().subtract(Duration(days: days))) &&
-              e.dateTime.isBefore(DateTime.now()),
+              e.dateTime.isAfter(DateTime.now().subtract(Duration(days: days))) && e.dateTime.isBefore(DateTime.now()),
         )
         .toList();
     // Add extra measurement from before range
@@ -237,12 +184,8 @@ class MainViewProvider extends ChangeNotifier {
       unit: getScaleUnitName(
         lastEntries.isEmpty ? null : lastEntries.last.unit,
       ),
-      sentiment: value > 0
-          ? Sentiment.NEGATIVE
-          : value < 0 ? Sentiment.POSITIVE : Sentiment.NEUTRAL,
-      direction: value > 0
-          ? Direction.UP
-          : value < 0 ? Direction.DOWN : Direction.UNCHANGED,
+      sentiment: value > 0 ? Sentiment.NEGATIVE : value < 0 ? Sentiment.POSITIVE : Sentiment.NEUTRAL,
+      direction: value > 0 ? Direction.UP : value < 0 ? Direction.DOWN : Direction.UNCHANGED,
     );
   }
 
@@ -251,9 +194,7 @@ class MainViewProvider extends ChangeNotifier {
     // Get all entries within the past 2 weeks
     List<WeightEntry> chartEntries = entries
         .where(
-          (e) =>
-              e.dateTime.isAfter(DateTime.now().subtract(Duration(days: 14))) &&
-              e.dateTime.isBefore(DateTime.now()),
+          (e) => e.dateTime.isAfter(DateTime.now().subtract(Duration(days: 14))) && e.dateTime.isBefore(DateTime.now()),
         )
         .toList();
     // Extras
@@ -272,10 +213,5 @@ class MainViewProvider extends ChangeNotifier {
     }
 
     return chartEntries;
-  }
-
-  @override
-  String toString() {
-    return 'MainViewProvider{_weightEntryProvider: $_weightEntryProvider, _currentWeight: $_currentWeight, _currentBMI: $_currentBMI, _currentWeightUnit: $_currentWeightUnit, _lineChartData: $_lineChartData, _statDatas: $_statDatas, _lastWeightEntries: $_lastWeightEntries}';
   }
 }

@@ -2,32 +2,30 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:xiaomi_scale/xiaomi_scale.dart';
 
 import '../globals.dart';
 
-class MeasureProvider extends ChangeNotifier {
+class MeasureProvider {
   StreamSubscription _measurementSubscription;
   StreamSubscription _bleStatusSubscription;
 
-  MeasureProvider() {
-    _bleStatusSubscription =
-        FlutterReactiveBle().statusStream.listen(_onBleStatus);
-  }
+  // Private streams
+  BehaviorSubject<MiScaleMeasurement> _measurement = BehaviorSubject.seeded(null);
 
-  @override
-  void dispose() {
-    _measurementSubscription?.cancel();
-    _bleStatusSubscription?.cancel();
-    super.dispose();
+  // Public streams
+  Stream<MiScaleMeasurement> get measurement => _measurement.asBroadcastStream();
+
+  MeasureProvider() {
+    _bleStatusSubscription = FlutterReactiveBle().statusStream.listen(_onBleStatus);
   }
 
   void startMeasuring() async {
-    // Stop if we're already measuringgirt
+    // Stop if we're already measuring
     if (_measurementSubscription != null) return;
     // Start measuring
-    _measurementSubscription =
-        MiScale.instance.takeMeasurements().listen(_onMeasurement);
+    _measurementSubscription = MiScale.instance.takeMeasurements().listen(_onMeasurement);
   }
 
   void stopMeasuring() {
@@ -36,29 +34,26 @@ class MeasureProvider extends ChangeNotifier {
     clearMeasurement();
   }
 
-  //
   // Event Handlers
-  //
 
   void _onMeasurement(MiScaleMeasurement measurement) {
-    if (_measurement == null || measurement.deviceId == _measurement.deviceId) {
-      if (_measurement == null) Application.navigator.pushNamed('/measure');
-      _updateMeasurement(measurement);
+    if (_measurement.value == null || measurement.deviceId == _measurement.value.deviceId) {
+      if (_measurement.value == null) Application.navigator.pushNamed('/measure');
+      _measurement.add(measurement);
     }
   }
 
   void _onBleStatus(BleStatus status) {
-    if (status == BleStatus.ready) startMeasuring();
+    if (status == BleStatus.ready)
+      startMeasuring();
     else if (_measurementSubscription != null) stopMeasuring();
   }
 
-  //
   // Public functions
-  //
 
   void clearMeasurement() {
-    if (_measurement == null) return;
-    _updateMeasurement(null);
+    if (_measurement.value == null) return;
+    _measurement.add(null);
     Application.navigator.popUntil(
       (route) => route.settings.name != '/measure',
     );
@@ -75,18 +70,5 @@ class MeasureProvider extends ChangeNotifier {
         if (_measurementSubscription != null) stopMeasuring();
         break;
     }
-  }
-
-  //
-  // Fields
-  //
-
-  MiScaleMeasurement _measurement;
-
-  MiScaleMeasurement get measurement => _measurement;
-
-  void _updateMeasurement(MiScaleMeasurement measurement) {
-    _measurement = measurement;
-    notifyListeners();
   }
 }

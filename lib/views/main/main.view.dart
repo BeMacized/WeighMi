@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:weigh_mi/models/menu-choice.model.dart';
+import 'package:weigh_mi/models/stat-data.model.dart';
+import 'package:weigh_mi/models/weight-entry.model.dart';
 import 'package:weigh_mi/views/main/widgets/ble-error-bar.widget.dart';
 import 'package:weigh_mi/views/main/widgets/main-last-entries-pane.widget.dart';
 import 'package:weigh_mi/views/main/widgets/main-stats-pane.widget.dart';
@@ -17,9 +20,19 @@ class MainView extends StatefulWidget {
 }
 
 class _MainViewState extends State<MainView> {
+  MainViewProvider vp;
+
   @override
   void initState() {
+    vp = Provider.of<MainViewProvider>(context, listen: false);
+    vp.onViewInit();
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    vp.onViewDispose();
+    super.dispose();
   }
 
   @override
@@ -32,41 +45,62 @@ class _MainViewState extends State<MainView> {
             child: SingleChildScrollView(
               child: Column(
                 children: <Widget>[
-                  Consumer<MainViewProvider>(builder: (context, vp, child) {
-                    return MainTopPane(
-                      currentWeight: vp.currentWeight,
-                      currentWeightUnit: vp.currentWeightUnit,
-                      currentBMI: vp.currentBMI,
-                      lineChartData: vp.lineChartData,
-                      menuChoices: [
-                        MenuChoice(
-                          icon: Icons.note_add,
-                          title: 'Import from Libra',
-                          onPressed: vp.onLibraImport,
-                        ),
-                        MenuChoice(
-                          icon: Icons.delete,
-                          title: 'Delete All Measurements',
-                          onPressed: () => vp.onDeleteAllMeasurements(context),
-                        ),
-                      ],
-                    );
-                  }),
+                  StreamBuilder<Map>(
+                      stream: Rx.combineLatest4(
+                          vp.currentWeight,
+                          vp.weightUnit,
+                          vp.currentBMI,
+                          vp.lineChartData,
+                          (currentWeight, weightUnit, currentBMI, lineChartData) => {
+                                'currentWeight': currentWeight,
+                                'weightUnit': weightUnit,
+                                'currentBMI': currentBMI,
+                                'lineChartData': lineChartData
+                              }),
+                      initialData: {},
+                      builder: (context, snapshot) {
+                        return MainTopPane(
+                          currentWeight: snapshot.data['currentWeight'],
+                          currentWeightUnit: snapshot.data['currentWeightUnit'],
+                          currentBMI: snapshot.data['currentBMI'],
+                          lineChartData: snapshot.data['lineChartData'],
+                          menuChoices: [
+                            MenuChoice(
+                              icon: Icons.note_add,
+                              title: 'Import from Libra',
+                              onPressed: () => vp.libraImport(),
+                            ),
+                            MenuChoice(
+                              icon: Icons.delete,
+                              title: 'Delete All Measurements',
+                              onPressed: () => vp.deleteAllMeasurements(context),
+                            ),
+                          ],
+                        );
+                      }),
                   BLEErrorBar(),
-                  Consumer<MainViewProvider>(builder: (context, vp, child) {
-                    return Padding(
-                      padding: EdgeInsets.only(left: 12, right: 12, top: 12),
-                      child: MainStatsPane(stats: vp.statDatas),
-                    );
-                  }),
-                  Consumer<MainViewProvider>(builder: (context, vp, child) {
-                    return Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: MainLastEntriesPane(
-                        weightEntries: vp.lastWeightEntries,
-                      ),
-                    );
-                  }),
+                  StreamBuilder<List<StatData>>(
+                    stream: vp.statDatas,
+                    initialData: [],
+                    builder: (context, snapshot) {
+                      return Padding(
+                        padding: EdgeInsets.only(left: 12, right: 12, top: 12),
+                        child: MainStatsPane(stats: snapshot.data),
+                      );
+                    },
+                  ),
+                  StreamBuilder<List<WeightEntry>>(
+                    stream: vp.lastWeightEntries,
+                    initialData: [],
+                    builder: (context, snapshot) {
+                      return Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: MainLastEntriesPane(
+                          weightEntries: snapshot.data,
+                        ),
+                      );
+                    },
+                  ),
                 ],
               ),
             ),
